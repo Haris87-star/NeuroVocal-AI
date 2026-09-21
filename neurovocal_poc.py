@@ -17,17 +17,17 @@ import time
 import numpy as np
 from scipy.signal import lfilter
 
-# Default Audio Parameters
+# Audio Parameters
 SAMPLE_RATE = 16000          # 16 kHz standard telephony / speech processing rate
 FRAME_SIZE = 1024            # 64 ms analysis frame
-HOP_SIZE = 400               # 25 ms hop size (40 Hz update rate, sub-sampled to 25 Hz)
+HOP_SIZE = 400               # 25 ms hop size (sub-sampled to 25 Hz)
 BUFFER_CAPACITY = 8192       # ~0.512 seconds circular audio history
 SILENCE_THRESHOLD = 0.008    # RMS below this is treated as ambient silence/pause
 
 
 def levinson_durbin(r, order):
     """
-    Solve the Yule-Walker equations using Levinson-Durbin recursion for LPC coefficients.
+    Solve Yule-Walker equations using Levinson-Durbin recursion for LPC coefficients.
     r: Autocorrelation sequence of length order + 1
     order: Prediction order
     """
@@ -43,7 +43,6 @@ def levinson_durbin(r, order):
             gamma += a[j] * r[i - j]
         gamma = (r[i] - gamma) / e
         
-        # Stability check: reflection coefficient must be bounded
         if abs(gamma) >= 1.0:
             gamma = np.sign(gamma) * 0.99
 
@@ -56,7 +55,6 @@ def levinson_durbin(r, order):
         if e <= 1e-12:
             break
 
-    # Standard LPC sign convention: A(z) = 1 - sum(a_k * z^-k)
     lpc_coeffs = np.zeros(order + 1)
     lpc_coeffs[0] = 1.0
     lpc_coeffs[1:] = -a[1:]
@@ -65,8 +63,9 @@ def levinson_durbin(r, order):
 
 class AcousticBiomarkerExtractor:
     """
-    Asynchronous DSP extractor computing pitch, perturbation, spectral purity,
+    DSP extractor computing pitch, perturbation, spectral purity,
     and vocal tract resonances from streaming audio frames.
+    Includes Exponential Moving Average (EMA) smoothing and alert latching.
     """
 
     def __init__(self, sample_rate=SAMPLE_RATE, min_f0=70.0, max_f0=400.0, lpc_order=14):
@@ -79,6 +78,18 @@ class AcousticBiomarkerExtractor:
         self.pitch_periods = []
         self.max_history_periods = 20
 
+        # Exponential Moving Average (EMA) smoothed state (prevents glitchy fluctuations)
+        self.smooth_csi = 0.05
+        self.smooth_jitter = 0.008
+        self.smooth_hnr = 18.0
+        self.smooth_f1 = 550.0
+        self.smooth_f2 = 1650.0
+        self.smooth_f0 = 0.0
+        
+        # Alert latching (holds alert for 1.2s to prevent flickering)
+        self.stroke_alert_timer = 0
+        self.alert_hold_frames = 30
+
     def calculate_rms(self, frame: np.ndarray) -> float:
         """Compute Root Mean Square (RMS) energy of audio frame."""
         if len(frame) == 0:
@@ -90,10 +101,8 @@ class AcousticBiomarkerExtractor:
         Estimate Fundamental Frequency (F0 in Hz) and Harmonics-to-Noise Ratio (HNR in dB)
         using Normalized Autocorrelation with parabolic peak interpolation.
         """
-        # Apply Hamming window to reduce spectral leakage
         windowed = frame * np.hamming(len(frame))
         
-        # Compute autocorrelation via FFT for speed
         n = len(windowed)
         n_fft = 2 ** math.ceil(math.log2(2 * n - 1))
         fft_data = np.fft.rfft(windowed, n_fft)
@@ -105,7 +114,6 @@ class AcousticBiomarkerExtractor:
 
         norm_autocorr = autocorr / r0
         
-        # Search for highest peak in legitimate human vocal range
         search_region = norm_autocorr[self.min_lag:self.max_lag]
         if len(search_region) == 0:
             return 0.0, 0.0
@@ -113,7 +121,7 @@ class AcousticBiomarkerExtractor:
         peak_idx = int(np.argmax(search_region)) + self.min_lag
         peak_val = norm_autocorr[peak_idx]
 
-        # Parabolic interpolation for fine sub-sample resolution
+        # Parabolic interpolation
         if self.min_lag < peak_idx < len(norm_autocorr) - 1:
             alpha = norm_autocorr[peak_idx - 1]
             beta = norm_autocorr[peak_idx]
@@ -125,10 +133,9 @@ class AcousticBiomarkerExtractor:
         else:
             refined_lag = float(peak_idx)
 
-        # Voiced speech detection threshold
-        if peak_val > 0.30 and refined_lag > 0:
+        # Voiced threshold
+        if peak_val > 0.32 and refined_lag > 0:
             f0 = self.sample_rate / refined_lag
-            # HNR calculation in dB: 10 * log10(R_peak / (R_0 - R_peak))
             bounded_peak = min(0.999, max(0.01, peak_val))
             hnr = 10.0 * math.log10(bounded_peak / (1.0 - bounded_peak + 1e-12))
             hnr = max(0.0, min(35.0, hnr))
@@ -137,72 +144,54 @@ class AcousticBiomarkerExtractor:
             return 0.0, 0.0
 
     def compute_jitter(self, current_f0: float) -> float:
-        """
-        Compute Relative Jitter (Period Perturbation Quotient) across recent voiced frames.
-        Normal: < 1.04%. Dysarthric/Tremor/Distress: > 2.5%.
-        """
+        """Compute Relative Jitter (Period Perturbation Quotient)."""
         if current_f0 > 0:
             period_ms = 1000.0 / current_f0
             self.pitch_periods.append(period_ms)
             if len(self.pitch_periods) > self.max_history_periods:
                 self.pitch_periods.pop(0)
         else:
-            # Decay history on unvoiced frames
-            if len(self.pitch_periods) > 5:
+            if len(self.pitch_periods) > 4:
                 self.pitch_periods.pop(0)
 
         if len(self.pitch_periods) < 4:
-            return 0.008  # Baseline nominal jitter
+            return 0.008
 
         periods = np.array(self.pitch_periods)
         mean_period = np.mean(periods)
         if mean_period <= 1e-6:
-            return 0.0
+            return 0.008
 
-        # Mean absolute difference between successive periods normalized by mean period
         diffs = np.abs(np.diff(periods))
         jitter = float(np.mean(diffs) / mean_period)
-        return min(0.15, max(0.0, jitter))
+        return min(0.12, max(0.005, jitter))
 
     def extract_formants(self, frame: np.ndarray):
-        """
-        Extract Formant Frequencies (F1 and F2 in Hz) using Linear Predictive Coding (LPC).
-        In dysarthria/stroke, vocal tract mobility degrades causing vowel space centralization
-        (F1 & F2 collapse toward neutral tract resonance ~500 Hz & 1500 Hz).
-        """
-        # Pre-emphasis filter to boost high frequencies: y[n] = x[n] - 0.95 * x[n-1]
+        """Extract Formant Frequencies (F1 and F2 in Hz) using LPC."""
         pre_emphasized = lfilter([1, -0.95], [1], frame)
         windowed = pre_emphasized * np.hamming(len(pre_emphasized))
         
-        # Compute autocorrelation sequence
         n = len(windowed)
         n_fft = 2 ** math.ceil(math.log2(2 * n - 1))
         fft_data = np.fft.rfft(windowed, n_fft)
         r = np.fft.irfft(fft_data * np.conj(fft_data), n_fft)[:self.lpc_order + 1]
 
-        # Solve LPC coefficients
         a = levinson_durbin(r, self.lpc_order)
         if np.any(np.isnan(a)) or np.any(np.isinf(a)):
-            return 500.0, 1500.0
+            return 550.0, 1650.0
 
-        # Find roots of the polynomial A(z)
         try:
             roots = np.roots(a)
         except Exception:
-            return 500.0, 1500.0
+            return 550.0, 1650.0
 
-        # Keep roots in upper complex half-plane
         roots = [r for r in roots if np.imag(r) > 0.01 and np.abs(r) <= 1.0]
 
         formants = []
         for r in roots:
-            # Resonance frequency
             freq = np.arctan2(np.imag(r), np.real(r)) * (self.sample_rate / (2.0 * np.pi))
-            # Bandwidth of the resonance
             bandwidth = -0.5 * (self.sample_rate / np.pi) * np.log(np.abs(r))
-            
-            # Filter biologically plausible speech formants (bandwidth < 450 Hz, 250 Hz <= freq <= 3800 Hz)
-            if 250.0 <= freq <= 3800.0 and bandwidth < 450.0:
+            if 250.0 <= freq <= 3600.0 and bandwidth < 450.0:
                 formants.append(freq)
 
         formants.sort()
@@ -212,36 +201,38 @@ class AcousticBiomarkerExtractor:
 
     def calculate_csi(self, rms: float, f0: float, jitter: float, hnr: float, f1: float, f2: float) -> tuple[float, str]:
         """
-        Calculate the Composite Stroke & Hypoxia Index (CSI Score: 0.0 to 1.0) and status label.
-        
-        Clinical Indicators:
-        - Acute Stroke / Dysarthria:
-            * Formant centralization: F2 shifts towards ~1500 Hz, F1/F2 dispersion collapses.
-            * Elevated jitter (> 0.025 / 2.5%) due to neuromuscular vocal fold asymmetry.
-        - Hypoxia / Respiratory Failure:
-            * Severely depressed HNR (< 12 dB) due to turbulent airflow and breathiness.
-            * High jitter and pitch tremor.
+        Calculate smoothed Composite Stroke & Hypoxia Index (CSI Score) with alert latching.
         """
         if rms < SILENCE_THRESHOLD:
-            return 0.05, "SILENCE"
+            # Smoothly decay towards baseline
+            self.smooth_csi = max(0.04, self.smooth_csi * 0.94)
+            if self.stroke_alert_timer > 0:
+                self.stroke_alert_timer -= 1
+                return round(self.smooth_csi, 2), "ACUTE_STROKE_ALERT"
+            return round(self.smooth_csi, 2), "SILENCE"
 
-        # 1. Jitter penalty: normal < 0.012, elevated > 0.025
-        jitter_penalty = np.clip((jitter - 0.012) / 0.028, 0.0, 1.0)
+        # 1. Jitter penalty (vocal cord paresis)
+        jitter_penalty = np.clip((jitter - 0.012) / 0.024, 0.0, 1.0)
 
-        # 2. HNR penalty: healthy > 18 dB, critical < 10 dB
-        hnr_penalty = np.clip((18.0 - hnr) / 12.0, 0.0, 1.0) if hnr > 0 else 0.5
+        # 2. HNR penalty (airway turbulence / hypoxia)
+        hnr_penalty = np.clip((18.0 - hnr) / 12.0, 0.0, 1.0) if hnr > 0 else 0.4
 
-        # 3. Formant Centralization Penalty (Vocal Tract Dysarthria Metric)
-        # Healthy vowels have distinct separation: e.g., /i/ F2 ~ 2200Hz, /a/ F1 ~ 750Hz
-        # Stroke patients exhibit severe centralization: F2 moves to 1450-1550 Hz
-        formant_collapse = np.clip(1.0 - abs(f2 - 1500.0) / 700.0, 0.0, 1.0)
+        # 3. Formant Centralization Penalty (Vowel space collapse toward 1500 Hz)
+        formant_collapse = np.clip(1.0 - abs(f2 - 1500.0) / 600.0, 0.0, 1.0)
 
-        # Weighted Composite Score
-        csi = float(0.40 * jitter_penalty + 0.35 * formant_collapse + 0.25 * hnr_penalty)
-        csi = round(float(np.clip(csi, 0.0, 1.0)), 3)
+        raw_csi = float(0.40 * jitter_penalty + 0.40 * formant_collapse + 0.20 * hnr_penalty)
+        
+        # Exponential moving average for clinical stability
+        alpha = 0.20
+        self.smooth_csi = alpha * raw_csi + (1.0 - alpha) * self.smooth_csi
+        csi = round(float(np.clip(self.smooth_csi, 0.0, 1.0)), 2)
 
-        # Clinical Triage Classification
-        if csi >= 0.65 or (jitter >= 0.032 and formant_collapse >= 0.75):
+        # Hysteresis alert latching
+        if csi >= 0.58 or (jitter >= 0.028 and formant_collapse >= 0.70):
+            self.stroke_alert_timer = self.alert_hold_frames
+            status = "ACUTE_STROKE_ALERT"
+        elif self.stroke_alert_timer > 0:
+            self.stroke_alert_timer -= 1
             status = "ACUTE_STROKE_ALERT"
         elif hnr_penalty >= 0.70 and hnr < 11.0:
             status = "SUSPECTED_HYPOXIA"
@@ -253,35 +244,48 @@ class AcousticBiomarkerExtractor:
         return csi, status
 
     def analyze_frame(self, frame: np.ndarray) -> dict:
-        """Full biomarker extraction pass on an audio frame."""
+        """Full biomarker extraction pass on an audio frame with smooth transitions."""
         rms = self.calculate_rms(frame)
         
         if rms < SILENCE_THRESHOLD:
+            csi, status = self.calculate_csi(rms, 0.0, 0.008, 0.0, self.smooth_f1, self.smooth_f2)
             return {
                 "timestamp": round(time.time(), 4),
                 "rms": round(rms, 4),
                 "f0": 0.0,
                 "jitter": 0.008,
                 "hnr": 0.0,
-                "f1": 500.0,
-                "f2": 1500.0,
-                "csi_score": 0.04,
-                "status_label": "SILENCE"
+                "f1": round(self.smooth_f1, 1),
+                "f2": round(self.smooth_f2, 1),
+                "csi_score": csi,
+                "status_label": status
             }
 
-        f0, hnr = self.extract_f0_and_hnr(frame)
-        jitter = self.compute_jitter(f0)
-        f1, f2 = self.extract_formants(frame)
-        csi, status = self.calculate_csi(rms, f0, jitter, hnr, f1, f2)
+        raw_f0, raw_hnr = self.extract_f0_and_hnr(frame)
+        raw_jitter = self.compute_jitter(raw_f0)
+        raw_f1, raw_f2 = self.extract_formants(frame)
+
+        # Smooth biomarkers to eliminate flickering
+        if raw_f0 > 0:
+            self.smooth_f0 = 0.30 * raw_f0 + 0.70 * self.smooth_f0 if self.smooth_f0 > 0 else raw_f0
+        else:
+            self.smooth_f0 = 0.0
+
+        self.smooth_jitter = 0.25 * raw_jitter + 0.75 * self.smooth_jitter
+        self.smooth_hnr = 0.25 * raw_hnr + 0.75 * self.smooth_hnr
+        self.smooth_f1 = 0.20 * raw_f1 + 0.80 * self.smooth_f1
+        self.smooth_f2 = 0.20 * raw_f2 + 0.80 * self.smooth_f2
+
+        csi, status = self.calculate_csi(rms, self.smooth_f0, self.smooth_jitter, self.smooth_hnr, self.smooth_f1, self.smooth_f2)
 
         return {
             "timestamp": round(time.time(), 4),
             "rms": round(rms, 4),
-            "f0": round(f0, 1),
-            "jitter": round(jitter, 4),
-            "hnr": round(hnr, 1),
-            "f1": round(f1, 1),
-            "f2": round(f2, 1),
+            "f0": round(self.smooth_f0, 1),
+            "jitter": round(self.smooth_jitter, 4),
+            "hnr": round(self.smooth_hnr, 1),
+            "f1": round(self.smooth_f1, 1),
+            "f2": round(self.smooth_f2, 1),
             "csi_score": csi,
             "status_label": status
         }
@@ -289,51 +293,51 @@ class AcousticBiomarkerExtractor:
 
 class SimulatedAudioGenerator:
     """
-    Generates synthetic speech waveforms mimicking different patient conditions
-    for offline testing and automated evaluation.
+    Continuous-phase synthetic speech generator for demonstrating clinical conditions.
     """
 
     def __init__(self, sample_rate=SAMPLE_RATE):
         self.sample_rate = sample_rate
-        self.phase = 0.0
-        self.t = 0.0
+        self.current_phase = 0.0
+        self.time_offset = 0.0
 
     def generate_frame(self, mode="healthy", num_samples=FRAME_SIZE) -> np.ndarray:
-        t_arr = np.linspace(self.t, self.t + (num_samples / self.sample_rate), num_samples, endpoint=False)
-        self.t += num_samples / self.sample_rate
+        t_arr = np.linspace(self.time_offset, self.time_offset + (num_samples / self.sample_rate), num_samples, endpoint=False)
+        self.time_offset += num_samples / self.sample_rate
 
-        if mode == "silence":
-            return np.random.normal(0, 0.001, num_samples).astype(np.float32)
-
-        if mode == "healthy":
-            # Clear phonation: F0 ~ 140 Hz, F1 ~ 700 Hz, F2 ~ 1800 Hz, high HNR
-            f0 = 140.0 + 3.0 * np.sin(2 * np.pi * 1.2 * t_arr)
-            carrier = np.sin(2 * np.pi * f0 * t_arr)
-            vocal_tract = 0.5 * np.sin(2 * np.pi * 700.0 * t_arr) + 0.3 * np.sin(2 * np.pi * 1800.0 * t_arr)
-            signal = 0.15 * (carrier + vocal_tract) + np.random.normal(0, 0.003, num_samples)
-
-        elif mode == "stroke":
-            # Acute stroke / dysarthria:
-            # Vocal fold paresis -> high jitter (frequency jitter jumps 30-50Hz)
-            # Vowel centralization -> F1 collapses to ~500Hz, F2 collapses to ~1500Hz
-            jitter_noise = np.random.normal(0, 18.0, num_samples)
-            f0 = 125.0 + jitter_noise
-            carrier = np.sin(2 * np.pi * f0 * t_arr)
-            centralized_tract = 0.6 * np.sin(2 * np.pi * 510.0 * t_arr) + 0.5 * np.sin(2 * np.pi * 1490.0 * t_arr)
-            signal = 0.18 * (carrier + centralized_tract) + np.random.normal(0, 0.008, num_samples)
-
-        elif mode == "hypoxia":
-            # Severe hypoxia / respiratory strain:
-            # Low HNR (high turbulent noise / breathiness), shallow amplitude modulation
-            f0 = 175.0 + 8.0 * np.sin(2 * np.pi * 4.0 * t_arr)
-            carrier = np.sin(2 * np.pi * f0 * t_arr)
-            turbulent_noise = np.random.normal(0, 0.045, num_samples)
-            signal = 0.08 * carrier + turbulent_noise
+        if mode == "stroke":
+            # Acute Stroke / Dysarthria Simulation:
+            # Continuous phase integration prevents phase cracking
+            tremor = 14.0 * np.sin(2 * np.pi * 6.0 * t_arr)
+            inst_f0 = 135.0 + tremor
+            phase_increments = 2 * np.pi * inst_f0 / self.sample_rate
+            phases = self.current_phase + np.cumsum(phase_increments)
+            self.current_phase = float(phases[-1] % (2 * np.pi))
+            carrier = np.sin(phases)
+            
+            # Dysarthric Formant Centralization: F1 ~ 515 Hz, F2 collapses to 1490 Hz
+            centralized_formants = (
+                0.45 * np.sin(2 * np.pi * 515.0 * t_arr) +
+                0.40 * np.sin(2 * np.pi * 1490.0 * t_arr)
+            )
+            signal = 0.16 * (carrier + centralized_formants) + np.random.normal(0, 0.005, num_samples)
+            return signal.astype(np.float32)
 
         else:
-            signal = np.random.normal(0, 0.002, num_samples)
-
-        return signal.astype(np.float32)
+            # Normal Healthy Speech Simulation:
+            inst_f0 = 145.0 + 2.0 * np.sin(2 * np.pi * 1.5 * t_arr)
+            phase_increments = 2 * np.pi * inst_f0 / self.sample_rate
+            phases = self.current_phase + np.cumsum(phase_increments)
+            self.current_phase = float(phases[-1] % (2 * np.pi))
+            carrier = np.sin(phases)
+            
+            # Normal dispersed vowel formants: F1 ~ 680 Hz, F2 ~ 1850 Hz
+            healthy_formants = (
+                0.35 * np.sin(2 * np.pi * 680.0 * t_arr) +
+                0.30 * np.sin(2 * np.pi * 1850.0 * t_arr)
+            )
+            signal = 0.14 * (carrier + healthy_formants) + np.random.normal(0, 0.002, num_samples)
+            return signal.astype(np.float32)
 
 
 def run_standalone_poc(mode="live"):
@@ -369,7 +373,7 @@ def run_standalone_poc(mode="live"):
 
     if mode in ["simulate", "test"]:
         sim = SimulatedAudioGenerator(SAMPLE_RATE)
-        scenarios = ["healthy", "stroke", "hypoxia"]
+        scenarios = ["healthy", "stroke"]
         for scenario in scenarios:
             print(f"\n---> Simulating Scenario: {scenario.upper()} (2.5 seconds) <---")
             for _ in range(60):

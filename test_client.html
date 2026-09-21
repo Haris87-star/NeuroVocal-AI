@@ -3,24 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NeuroVocal AI - Real-Time Telemetry HUD (Phase 1 Test Client)</title>
+  <title>NeuroVocal AI - Clinical Dispatcher HUD</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #090d16;
-      --card-bg: rgba(18, 24, 38, 0.75);
-      --card-border: rgba(255, 255, 255, 0.08);
-      --text-main: #f1f5f9;
-      --text-muted: #94a3b8;
-      --cyan: #06b6d4;
-      --cyan-glow: rgba(6, 182, 212, 0.25);
-      --emerald: #10b981;
-      --amber: #f59e0b;
-      --rose: #f43f5e;
-      --rose-glow: rgba(244, 63, 94, 0.35);
-      --purple: #8b5cf6;
+      --bg: #0b1120;
+      --card: #131d31;
+      --border: rgba(255, 255, 255, 0.08);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --cyan: #38bdf8;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --red: #f43f5e;
+      --red-glow: rgba(244, 63, 94, 0.25);
     }
 
     * {
@@ -31,28 +29,26 @@
 
     body {
       background-color: var(--bg);
-      background-image: 
-        radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.12) 0px, transparent 50%),
-        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%);
-      color: var(--text-main);
+      color: var(--text);
       font-family: 'Plus Jakarta Sans', sans-serif;
       min-height: 100vh;
       padding: 24px;
-      overflow-x: hidden;
+      overflow-y: scroll;
     }
 
     .container {
-      max-width: 1280px;
+      max-width: 1180px;
       margin: 0 auto;
     }
 
+    /* Header */
     header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       padding-bottom: 20px;
-      border-bottom: 1px solid var(--card-border);
-      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
       flex-wrap: wrap;
       gap: 16px;
     }
@@ -60,136 +56,129 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
     }
 
-    .logo-badge {
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--cyan), var(--purple));
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #0284c7, #6366f1);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 800;
-      font-size: 22px;
+      font-size: 18px;
       color: #fff;
-      box-shadow: 0 0 20px var(--cyan-glow);
     }
 
     h1 {
-      font-size: 24px;
-      font-weight: 800;
+      font-size: 22px;
+      font-weight: 700;
       letter-spacing: -0.5px;
     }
 
-    .sub-brand {
-      font-size: 13px;
-      color: var(--text-muted);
+    .subtitle {
+      font-size: 12px;
+      color: var(--muted);
       font-weight: 500;
     }
 
-    .status-pill {
+    /* Fixed Alert Area (Does NOT jump or shift layout) */
+    .alert-container {
+      height: 72px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .alert-banner {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(244, 63, 94, 0.22), rgba(244, 63, 94, 0.08));
+      border: 1px solid var(--red);
+      border-radius: 12px;
+      padding: 0 20px;
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 8px 16px;
-      border-radius: 9999px;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: var(--emerald);
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: currentColor;
-      box-shadow: 0 0 10px currentColor;
-      animation: pulse 1.8s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(0.85); }
-    }
-
-    /* Emergency Alert Banner */
-    .alert-banner {
-      display: none;
-      padding: 16px 20px;
-      border-radius: 14px;
-      background: linear-gradient(90deg, rgba(244, 63, 94, 0.2), rgba(244, 63, 94, 0.05));
-      border: 1px solid var(--rose);
-      margin-bottom: 24px;
-      align-items: center;
       justify-content: space-between;
-      box-shadow: 0 0 30px var(--rose-glow);
-      animation: alertPulse 1.2s infinite alternate;
-    }
-
-    @keyframes alertPulse {
-      from { box-shadow: 0 0 20px rgba(244, 63, 94, 0.2); }
-      to { box-shadow: 0 0 35px rgba(244, 63, 94, 0.5); }
+      box-shadow: 0 0 25px var(--red-glow);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-4px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
     }
 
     .alert-banner.active {
-      display: flex;
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
     }
 
     .alert-title {
-      font-size: 18px;
+      font-size: 15px;
       font-weight: 800;
       color: #fff;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
     .alert-desc {
-      font-size: 13px;
+      font-size: 12px;
       color: #fecdd3;
-      margin-top: 4px;
+      margin-top: 2px;
     }
 
-    /* Controls Bar */
+    .btn-dispatch {
+      background: var(--red);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    /* Controls Bar - Simplified to just 2 intuitive options */
     .controls-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 24px;
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
+      background: var(--card);
+      border: 1px solid var(--border);
       padding: 12px 18px;
-      border-radius: 14px;
-      backdrop-filter: blur(12px);
+      border-radius: 12px;
+      margin-bottom: 20px;
       flex-wrap: wrap;
+      gap: 12px;
     }
 
-    .mode-label {
+    .controls-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       font-size: 13px;
       font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      color: var(--muted);
     }
 
-    .btn-group {
+    .toggle-group {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+      gap: 4px;
     }
 
-    button {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--card-border);
-      color: var(--text-main);
-      padding: 8px 14px;
-      border-radius: 8px;
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      padding: 6px 14px;
+      border-radius: 6px;
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
@@ -197,180 +186,160 @@
       font-family: inherit;
     }
 
-    button:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: rgba(255, 255, 255, 0.2);
+    .mode-btn:hover {
+      color: var(--text);
     }
 
-    button.active {
+    .mode-btn.active {
       background: var(--cyan);
-      color: #000;
-      border-color: var(--cyan);
-      box-shadow: 0 0 15px var(--cyan-glow);
+      color: #0f172a;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
     }
 
-    button.btn-stroke.active {
-      background: var(--rose);
+    .mode-btn.btn-stroke.active {
+      background: var(--red);
       color: #fff;
-      border-color: var(--rose);
-      box-shadow: 0 0 15px var(--rose-glow);
+      box-shadow: 0 0 12px var(--red-glow);
     }
 
-    /* Telemetry Grid */
+    /* Grid */
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 18px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
     }
 
     .card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 20px;
-      backdrop-filter: blur(12px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
       position: relative;
-      overflow: hidden;
-      transition: border-color 0.2s ease;
     }
 
-    .card:hover {
-      border-color: rgba(255, 255, 255, 0.15);
-    }
-
-    .card-header {
+    .card-hero {
+      grid-column: span 3;
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      justify-content: space-between;
+      padding: 22px 28px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
     }
 
-    .card-title {
-      font-size: 12px;
+    @media (max-width: 900px) {
+      .card-hero {
+        grid-column: span 1;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+      }
+    }
+
+    .card-label {
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.8px;
-      color: var(--text-muted);
-    }
-
-    .card-unit {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      color: var(--cyan);
-      background: rgba(6, 182, 212, 0.1);
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-
-    .value-display {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 38px;
-      font-weight: 700;
-      letter-spacing: -1px;
-      margin-bottom: 8px;
+      color: var(--muted);
       display: flex;
-      align-items: baseline;
-      gap: 6px;
+      justify-content: space-between;
+      margin-bottom: 8px;
     }
 
-    .meter-bar {
+    .unit {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--cyan);
+      background: rgba(56, 189, 248, 0.1);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+
+    .val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+    }
+
+    .meter {
       height: 6px;
       background: rgba(255, 255, 255, 0.08);
       border-radius: 3px;
       overflow: hidden;
-      margin-top: 14px;
+      margin-bottom: 8px;
     }
 
     .meter-fill {
       height: 100%;
-      background: linear-gradient(90deg, var(--cyan), var(--emerald));
+      background: var(--cyan);
       width: 0%;
       border-radius: 3px;
-      transition: width 0.1s linear, background 0.3s ease;
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    .card-meta {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 10px;
+    .card-note {
+      font-size: 11px;
+      color: var(--muted);
       display: flex;
       justify-content: space-between;
     }
 
-    /* Primary Hero Risk Card */
-    .card-hero {
-      grid-column: span 2;
-      background: linear-gradient(135deg, rgba(18, 24, 38, 0.9), rgba(15, 23, 42, 0.8));
-      border: 1px solid rgba(6, 182, 212, 0.3);
-    }
-
-    @media (max-width: 768px) {
-      .card-hero { grid-column: span 1; }
-    }
-
-    .csi-gauge-wrap {
+    /* Primary CSI Display */
+    .csi-value-box {
       display: flex;
-      align-items: center;
-      gap: 24px;
-      margin-top: 10px;
+      align-items: baseline;
+      gap: 14px;
     }
 
-    .csi-number {
-      font-size: 56px;
+    .csi-big {
       font-family: 'JetBrains Mono', monospace;
+      font-size: 48px;
       font-weight: 800;
-      color: var(--emerald);
+      color: var(--green);
       transition: color 0.3s ease;
     }
 
-    /* Performance / Stream stats bar */
-    .perf-bar {
+    .status-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      background: rgba(52, 211, 153, 0.15);
+      color: var(--green);
+      transition: all 0.3s ease;
+    }
+
+    /* Telemetry Footer */
+    .footer-bar {
       display: flex;
       justify-content: space-between;
-      background: rgba(15, 23, 42, 0.5);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
-      padding: 12px 20px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      color: var(--text-muted);
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .perf-item {
-      display: flex;
-      gap: 6px;
-    }
-
-    .perf-val {
-      color: var(--cyan);
-      font-weight: 600;
-    }
-
-    /* Live Packet Terminal Log */
-    .terminal-card {
-      background: #030712;
-      border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 16px;
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
-      max-height: 220px;
-      overflow-y: auto;
+      color: var(--muted);
+      flex-wrap: wrap;
+      gap: 10px;
     }
 
-    .log-line {
-      line-height: 1.6;
-      color: #94a3b8;
-      white-space: nowrap;
-    }
-
-    .log-alert {
-      color: #f43f5e;
-      font-weight: 700;
+    .live-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-right: 6px;
     }
   </style>
 </head>
@@ -379,370 +348,330 @@
     <!-- Header -->
     <header>
       <div class="brand">
-        <div class="logo-badge">NV</div>
+        <div class="logo-icon">NV</div>
         <div>
-          <h1>NeuroVocal AI <span style="font-weight: 400; opacity: 0.6; font-size: 18px;">// Telemetry HUD</span></h1>
-          <div class="sub-brand">Emergency Triage & Acoustic Biomarker Engine &bull; Phase 1 Validation Client</div>
+          <h1>NeuroVocal AI</h1>
+          <div class="subtitle">Emergency Voice Triage &bull; Real-Time Acoustic Biomarker Monitor</div>
         </div>
       </div>
-      <div class="status-pill" id="connStatus">
-        <div class="status-dot"></div>
-        <span id="connStatusText">CONNECTING...</span>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); display: flex; align-items: center;">
+        <span class="live-dot" id="connDot"></span>
+        <span id="connText">Connected @ 25 Hz</span>
       </div>
     </header>
 
-    <!-- Emergency Stroke Alert Banner -->
-    <div class="alert-banner" id="strokeAlertBanner">
-      <div>
-        <div class="alert-title">
-          <span>⚠️</span> CODE RED: ACUTE STROKE BIOMARKER DETECTED
+    <!-- Fixed Height Alert Area (Never causes layout jumps) -->
+    <div class="alert-container">
+      <div class="alert-banner" id="strokeAlertBanner">
+        <div>
+          <div class="alert-title">
+            <span>🚨</span> CODE RED: ACUTE STROKE BIOMARKER DETECTED
+          </div>
+          <div class="alert-desc">
+            Vocal tract dysarthria confirmed: Formant symmetry collapsed (&Delta;F2 near 1500 Hz).
+          </div>
         </div>
-        <div class="alert-desc">
-          Vocal tract asymmetry flagged: Formant centralization index exceeding critical threshold (&Delta;F2 collapse to 1500 Hz).
-        </div>
+        <button class="btn-dispatch">DISPATCH AMBULANCE (PRIORITY 1)</button>
       </div>
-      <button class="btn-stroke active" style="font-size: 13px; padding: 10px 18px;">DISPATCH AMBULANCE</button>
     </div>
 
-    <!-- Interactive Simulation & Controls Bar -->
+    <!-- Controls Bar: 2 Clear, Intuitive Modes -->
     <div class="controls-bar">
-      <div class="mode-label">Input Source Simulation:</div>
-      <div class="btn-group">
-        <button id="btnLive" onclick="setMode('live')">🎙️ Live Hardware Mic</button>
-        <button id="btnHealthy" onclick="setMode('healthy')">✅ Normal Speech</button>
-        <button id="btnStroke" class="btn-stroke" onclick="setMode('stroke')">🚨 Stroke / Dysarthria</button>
-        <button id="btnHypoxia" onclick="setMode('hypoxia')">🫁 Hypoxia / Respiratory</button>
-        <button id="btnSilence" onclick="setMode('silence')">🔇 Silence</button>
+      <div class="controls-left">
+        <span>Audio Input Source:</span>
+      </div>
+      <div class="toggle-group">
+        <button id="btnLive" class="mode-btn active" onclick="setMode('live')">🎙️ Live Microphone</button>
+        <button id="btnStroke" class="mode-btn btn-stroke" onclick="setMode('stroke')">🚨 Simulate Stroke Call (Demo)</button>
       </div>
     </div>
 
-    <!-- Primary Telemetry Cards -->
+    <!-- Main Biomarker Cards -->
     <div class="grid">
-      <!-- Composite Risk Index -->
+      <!-- CSI Primary Card -->
       <div class="card card-hero">
-        <div class="card-header">
-          <span class="card-title">Composite Stroke & Hypoxia Index (CSI)</span>
-          <span class="card-unit" id="statusBadge">ANALYZING</span>
+        <div>
+          <div class="card-label">
+            <span>Composite Stroke & Vocal Strain Index (CSI)</span>
+          </div>
+          <div class="csi-value-box">
+            <div class="csi-big" id="csiScore">0.05</div>
+            <div>
+              <div class="status-badge" id="statusBadge">HEALTHY</div>
+              <div style="font-size: 12px; color: var(--muted); margin-top: 4px;" id="statusDesc">
+                Normal vocal fold stability and tract symmetry
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="csi-gauge-wrap">
-          <div class="csi-number" id="csiScore">0.00</div>
-          <div style="flex: 1;">
-            <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;" id="csiLabel">Normal Vocal Dynamics</div>
-            <div style="font-size: 12px; color: var(--text-muted);">
-              Multi-factor biomarker combining jitter perturbation, vowel space compression (F1/F2), and turbulent airflow noise.
-            </div>
-            <div class="meter-bar" style="height: 10px; margin-top: 12px;">
-              <div class="meter-fill" id="csiMeter" style="width: 0%;"></div>
-            </div>
+        <div style="width: 320px; max-width: 100%;">
+          <div class="card-label"><span>Risk Level</span><span id="csiPct">5%</span></div>
+          <div class="meter" style="height: 10px;">
+            <div class="meter-fill" id="csiMeter" style="width: 5%; background: var(--green);"></div>
+          </div>
+          <div class="card-note">
+            <span>0.00 Normal</span>
+            <span>0.65 Critical Alert</span>
           </div>
         </div>
       </div>
 
-      <!-- F0 Pitch -->
+      <!-- Pitch F0 -->
       <div class="card">
-        <div class="card-header">
-          <span class="card-title">Fundamental Pitch (F₀)</span>
-          <span class="card-unit">Hz</span>
+        <div class="card-label">
+          <span>Fundamental Pitch (F0)</span>
+          <span class="unit">Hz</span>
         </div>
-        <div class="value-display">
-          <span id="f0Val">0.0</span>
-          <span style="font-size: 16px; color: var(--text-muted); font-weight: 500;">Hz</span>
-        </div>
-        <div class="meter-bar">
+        <div class="val" id="f0Val">0.0</div>
+        <div class="meter">
           <div class="meter-fill" id="f0Meter" style="width: 0%;"></div>
         </div>
-        <div class="card-meta">
-          <span>Vocal fold vibration rate</span>
-          <span id="f0Range">Nominal: 85 - 255 Hz</span>
+        <div class="card-note">
+          <span>Vocal cord vibration</span>
+          <span>Target: 85 - 255 Hz</span>
         </div>
       </div>
 
       <!-- Jitter Perturbation -->
       <div class="card">
-        <div class="card-header">
-          <span class="card-title">Jitter Perturbation</span>
-          <span class="card-unit">%</span>
+        <div class="card-label">
+          <span>Jitter Perturbation</span>
+          <span class="unit">%</span>
         </div>
-        <div class="value-display">
-          <span id="jitterVal">0.00</span>
-          <span style="font-size: 16px; color: var(--text-muted); font-weight: 500;">%</span>
+        <div class="val" id="jitterVal">0.80%</div>
+        <div class="meter">
+          <div class="meter-fill" id="jitterMeter" style="width: 15%;"></div>
         </div>
-        <div class="meter-bar">
-          <div class="meter-fill" id="jitterMeter" style="width: 0%;"></div>
-        </div>
-        <div class="card-meta">
-          <span>Neurological pitch stability</span>
-          <span>Alert threshold: > 2.50%</span>
+        <div class="card-note">
+          <span>Pitch stability</span>
+          <span>Threshold: &gt; 2.50%</span>
         </div>
       </div>
 
-      <!-- HNR -->
+      <!-- Harmonics-to-Noise (HNR) -->
       <div class="card">
-        <div class="card-header">
-          <span class="card-title">Harmonics-to-Noise (HNR)</span>
-          <span class="card-unit">dB</span>
+        <div class="card-label">
+          <span>Harmonics-to-Noise (HNR)</span>
+          <span class="unit">dB</span>
         </div>
-        <div class="value-display">
-          <span id="hnrVal">0.0</span>
-          <span style="font-size: 16px; color: var(--text-muted); font-weight: 500;">dB</span>
-        </div>
-        <div class="meter-bar">
+        <div class="val" id="hnrVal">0.0</div>
+        <div class="meter">
           <div class="meter-fill" id="hnrMeter" style="width: 0%;"></div>
         </div>
-        <div class="card-meta">
-          <span>Airway breathiness / Hypoxia</span>
+        <div class="card-note">
+          <span>Breathiness / Hypoxia</span>
           <span>Critical: &lt; 12.0 dB</span>
         </div>
       </div>
 
       <!-- Formants F1 & F2 -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Vocal Tract Formants</span>
-          <span class="card-unit">LPC Resonances</span>
+      <div class="card" style="grid-column: span 2;">
+        <div class="card-label">
+          <span>Vocal Tract Resonances (Formants)</span>
+          <span class="unit">LPC Analysis</span>
         </div>
-        <div class="value-display" style="font-size: 26px;">
-          <span>F₁: <span id="f1Val">500</span>Hz</span>
-          <span style="margin: 0 8px; color: rgba(255,255,255,0.2);">|</span>
-          <span>F₂: <span id="f2Val">1500</span>Hz</span>
+        <div class="val" style="font-size: 24px;">
+          F₁: <span id="f1Val">550</span> Hz &nbsp;|&nbsp; F₂: <span id="f2Val">1650</span> Hz
         </div>
-        <div class="meter-bar">
+        <div class="meter">
           <div class="meter-fill" id="formantMeter" style="width: 50%;"></div>
         </div>
-        <div class="card-meta">
-          <span>Vowel space centralization</span>
-          <span id="formantStatus">Healthy dispersion</span>
+        <div class="card-note">
+          <span id="formantStatus">Healthy vowel space dispersion</span>
+          <span>Slur collapse &Delta;F2 &rarr; 1500 Hz</span>
         </div>
       </div>
 
-      <!-- Audio RMS -->
+      <!-- Audio Frame Power -->
       <div class="card">
-        <div class="card-header">
-          <span class="card-title">Audio Frame Energy (RMS)</span>
-          <span class="card-unit">Amplitude</span>
+        <div class="card-label">
+          <span>Mic Audio Level</span>
+          <span class="unit">RMS</span>
         </div>
-        <div class="value-display">
-          <span id="rmsVal">0.000</span>
-        </div>
-        <div class="meter-bar">
+        <div class="val" id="rmsVal" style="font-size: 24px;">0.0000</div>
+        <div class="meter">
           <div class="meter-fill" id="rmsMeter" style="width: 0%;"></div>
         </div>
-        <div class="card-meta">
-          <span>Mic audio level</span>
-          <span id="voiceActivity">SILENCE</span>
+        <div class="card-note">
+          <span id="vadStatus">Ambient Silence</span>
+          <span>Threshold: 0.008</span>
         </div>
       </div>
     </div>
 
-    <!-- Performance & Latency Telemetry Stats -->
-    <div class="perf-bar">
-      <div class="perf-item">Broadcast Target: <span class="perf-val">25.0 Hz</span></div>
-      <div class="perf-item">Live Delivery Rate: <span class="perf-val" id="fpsVal">0.0 Hz</span></div>
-      <div class="perf-item">Inter-packet Delta: <span class="perf-val" id="deltaVal">0.0 ms</span></div>
-      <div class="perf-item">Packets Received: <span class="perf-val" id="packetCountVal">0</span></div>
-      <div class="perf-item">Buffer Latency: <span class="perf-val" style="color: var(--emerald);">0 ms (Zero-drop queue)</span></div>
-    </div>
-
-    <!-- Packet Stream Terminal Feed -->
-    <div class="terminal-card" id="terminalFeed">
-      <div class="log-line" style="color: #64748b;">[SYSTEM] Initializing NeuroVocal WebSocket test client...</div>
+    <!-- Live Telemetry Stats -->
+    <div class="footer-bar">
+      <div>Stream: <span style="color: var(--cyan);" id="fpsVal">25.0 Hz</span></div>
+      <div>Packet Latency: <span style="color: var(--green);" id="deltaVal">40.0 ms</span></div>
+      <div>Packets Received: <span style="color: var(--text);" id="countVal">0</span></div>
+      <div>Buffer Latency: <span style="color: var(--green);">0 ms (Zero-drop)</span></div>
     </div>
   </div>
 
   <script>
     let ws = null;
     let packetCount = 0;
-    let lastPacketTime = performance.now();
-    let rollingFps = 25.0;
-    const maxLogs = 50;
-    let currentActiveMode = "live";
+    let lastTime = performance.now();
+    let currentMode = "live";
 
-    function connectWebSocket() {
+    function connect() {
       const loc = window.location;
       const wsProto = loc.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${wsProto}//${loc.host}/ws/telemetry`;
 
-      updateConnStatus("CONNECTING...", "var(--amber)");
-
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        updateConnStatus("CONNECTED (25 Hz)", "var(--emerald)");
-        addLog("[WEBSOCKET] Connected to telemetry stream.");
+        document.getElementById("connDot").style.background = "var(--green)";
+        document.getElementById("connText").textContent = "Connected @ 25 Hz";
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = (evt) => {
+        const now = performance.now();
+        const delta = now - lastTime;
+        lastTime = now;
+        packetCount++;
+
         try {
-          const now = performance.now();
-          const delta = now - lastPacketTime;
-          lastPacketTime = now;
-          packetCount++;
-
-          if (delta > 0) {
-            const instFps = 1000 / delta;
-            rollingFps = (rollingFps * 0.9) + (instFps * 0.1);
-          }
-
-          const data = JSON.parse(event.data);
-          renderTelemetry(data, delta);
-        } catch (err) {
-          console.error("Packet parse error:", err);
+          const d = JSON.parse(evt.data);
+          updateDashboard(d, delta);
+        } catch (e) {
+          console.error(e);
         }
       };
 
-      ws.onerror = (err) => {
-        updateConnStatus("ERROR", "var(--rose)");
+      ws.onerror = () => {
+        document.getElementById("connDot").style.background = "var(--red)";
+        document.getElementById("connText").textContent = "Connection Error";
       };
 
       ws.onclose = () => {
-        updateConnStatus("DISCONNECTED (Retrying in 2s)", "var(--rose)");
-        setTimeout(connectWebSocket, 2000);
+        document.getElementById("connDot").style.background = "var(--amber)";
+        document.getElementById("connText").textContent = "Reconnecting...";
+        setTimeout(connect, 2000);
       };
     }
 
-    function renderTelemetry(data, deltaMs) {
-      // 1. Performance stats
-      document.getElementById("fpsVal").textContent = rollingFps.toFixed(1) + " Hz";
-      document.getElementById("deltaVal").textContent = deltaMs.toFixed(1) + " ms";
-      document.getElementById("packetCountVal").textContent = packetCount;
+    function updateDashboard(d, deltaMs) {
+      // Throttled stats
+      if (packetCount % 5 === 0) {
+        document.getElementById("countVal").textContent = packetCount;
+        document.getElementById("deltaVal").textContent = deltaMs.toFixed(1) + " ms";
+        document.getElementById("fpsVal").textContent = (1000 / Math.max(1, deltaMs)).toFixed(1) + " Hz";
+      }
 
-      // 2. Metrics rendering
-      document.getElementById("rmsVal").textContent = data.rms.toFixed(4);
-      document.getElementById("rmsMeter").style.width = Math.min(100, (data.rms / 0.25) * 100) + "%";
+      // Audio Level
+      document.getElementById("rmsVal").textContent = d.rms.toFixed(4);
+      document.getElementById("rmsMeter").style.width = Math.min(100, (d.rms / 0.20) * 100) + "%";
+      document.getElementById("vadStatus").textContent = d.rms >= 0.008 ? "Voice Phonation" : "Ambient Silence";
 
-      document.getElementById("voiceActivity").textContent = data.rms > 0.008 ? "VOICED PHONATION" : "SILENCE / AMBIENT";
+      // Pitch F0
+      document.getElementById("f0Val").textContent = d.f0 > 0 ? d.f0.toFixed(1) : "0.0";
+      document.getElementById("f0Meter").style.width = Math.min(100, (d.f0 / 300) * 100) + "%";
 
-      document.getElementById("f0Val").textContent = data.f0 > 0 ? data.f0.toFixed(1) : "0.0";
-      document.getElementById("f0Meter").style.width = Math.min(100, (data.f0 / 350) * 100) + "%";
+      // Jitter
+      const jitterPct = d.jitter * 100;
+      document.getElementById("jitterVal").textContent = jitterPct.toFixed(2) + "%";
+      document.getElementById("jitterMeter").style.width = Math.min(100, (jitterPct / 5.0) * 100) + "%";
 
-      const jitterPct = (data.jitter * 100);
-      document.getElementById("jitterVal").textContent = jitterPct.toFixed(2);
-      document.getElementById("jitterMeter").style.width = Math.min(100, (jitterPct / 6.0) * 100) + "%";
+      // HNR
+      document.getElementById("hnrVal").textContent = d.hnr.toFixed(1);
+      document.getElementById("hnrMeter").style.width = Math.min(100, (d.hnr / 30.0) * 100) + "%";
 
-      document.getElementById("hnrVal").textContent = data.hnr.toFixed(1);
-      document.getElementById("hnrMeter").style.width = Math.min(100, (data.hnr / 30.0) * 100) + "%";
-
-      document.getElementById("f1Val").textContent = Math.round(data.f1);
-      document.getElementById("f2Val").textContent = Math.round(data.f2);
-
-      // Formant centralization check (F2 close to 1500 Hz indicates dysarthria)
-      const f2Dev = Math.abs(data.f2 - 1500);
-      const formantPct = Math.max(0, 100 - (f2Dev / 8));
-      document.getElementById("formantMeter").style.width = formantPct + "%";
-      if (f2Dev < 150 && data.rms > 0.01) {
-        document.getElementById("formantStatus").textContent = "Centralized (Dysarthric collapse)";
-        document.getElementById("formantStatus").style.color = "var(--rose)";
+      // Formants
+      document.getElementById("f1Val").textContent = Math.round(d.f1);
+      document.getElementById("f2Val").textContent = Math.round(d.f2);
+      const f2Dist = Math.abs(d.f2 - 1500);
+      if (f2Dist < 160 && d.rms >= 0.01) {
+        document.getElementById("formantStatus").textContent = "Centralized (Vowel space collapse)";
+        document.getElementById("formantStatus").style.color = "var(--red)";
       } else {
-        document.getElementById("formantStatus").textContent = "Healthy dispersion";
-        document.getElementById("formantStatus").style.color = "var(--text-muted)";
+        document.getElementById("formantStatus").textContent = "Healthy vowel dispersion";
+        document.getElementById("formantStatus").style.color = "var(--muted)";
       }
+      document.getElementById("formantMeter").style.width = Math.max(0, 100 - (f2Dist / 7)) + "%";
 
-      // 3. CSI Score & Triage Status
-      const csiEl = document.getElementById("csiScore");
-      csiEl.textContent = data.csi_score.toFixed(2);
-      document.getElementById("csiMeter").style.width = (data.csi_score * 100) + "%";
+      // CSI Score & Status
+      const csi = d.csi_score;
+      document.getElementById("csiScore").textContent = csi.toFixed(2);
+      document.getElementById("csiPct").textContent = Math.round(csi * 100) + "%";
+      document.getElementById("csiMeter").style.width = Math.round(csi * 100) + "%";
 
-      const alertBanner = document.getElementById("strokeAlertBanner");
-      const statusBadge = document.getElementById("statusBadge");
+      const badge = document.getElementById("statusBadge");
+      const csiBig = document.getElementById("csiScore");
+      const banner = document.getElementById("strokeAlertBanner");
+      const desc = document.getElementById("statusDesc");
+      const csiMeter = document.getElementById("csiMeter");
 
-      if (data.status_label === "ACUTE_STROKE_ALERT") {
-        csiEl.style.color = "var(--rose)";
-        statusBadge.textContent = "ACUTE STROKE ALERT";
-        statusBadge.style.background = "rgba(244, 63, 94, 0.2)";
-        statusBadge.style.color = "var(--rose)";
-        alertBanner.classList.add("active");
-        document.getElementById("csiLabel").textContent = "CRITICAL: Dysarthric Vowel Collapse & High Perturbation";
-      } else if (data.status_label === "SUSPECTED_HYPOXIA") {
-        csiEl.style.color = "var(--amber)";
-        statusBadge.textContent = "SUSPECTED HYPOXIA";
-        statusBadge.style.background = "rgba(245, 158, 11, 0.2)";
-        statusBadge.style.color = "var(--amber)";
-        alertBanner.classList.remove("active");
-        document.getElementById("csiLabel").textContent = "WARNING: Low HNR & Turbulent Airflow Turbulence";
-      } else if (data.status_label === "MILD_STRAIN") {
-        csiEl.style.color = "var(--amber)";
-        statusBadge.textContent = "MILD STRAIN";
-        statusBadge.style.background = "rgba(245, 158, 11, 0.15)";
-        statusBadge.style.color = "var(--amber)";
-        alertBanner.classList.remove("active");
-        document.getElementById("csiLabel").textContent = "Elevated Acoustic Strain";
-      } else if (data.status_label === "SILENCE") {
-        csiEl.style.color = "var(--text-muted)";
-        statusBadge.textContent = "SILENCE / PAUSE";
-        statusBadge.style.background = "rgba(255, 255, 255, 0.08)";
-        statusBadge.style.color = "var(--text-muted)";
-        alertBanner.classList.remove("active");
-        document.getElementById("csiLabel").textContent = "Ambient background";
+      if (d.status_label === "ACUTE_STROKE_ALERT") {
+        badge.textContent = "ACUTE STROKE ALERT";
+        badge.style.background = "rgba(244, 63, 94, 0.2)";
+        badge.style.color = "var(--red)";
+        csiBig.style.color = "var(--red)";
+        csiMeter.style.background = "var(--red)";
+        desc.textContent = "Neurological asymmetry: Vowel space collapse & vocal fold tremor";
+        banner.classList.add("active");
+      } else if (d.status_label === "SUSPECTED_HYPOXIA") {
+        badge.textContent = "SUSPECTED HYPOXIA";
+        badge.style.background = "rgba(251, 191, 36, 0.2)";
+        badge.style.color = "var(--amber)";
+        csiBig.style.color = "var(--amber)";
+        csiMeter.style.background = "var(--amber)";
+        desc.textContent = "Respiratory strain: Low HNR & turbulent breath noise";
+        banner.classList.remove("active");
+      } else if (d.status_label === "MILD_STRAIN") {
+        badge.textContent = "MILD STRAIN";
+        badge.style.background = "rgba(251, 191, 36, 0.15)";
+        badge.style.color = "var(--amber)";
+        csiBig.style.color = "var(--amber)";
+        csiMeter.style.background = "var(--amber)";
+        desc.textContent = "Slight vocal instability detected";
+        banner.classList.remove("active");
+      } else if (d.status_label === "SILENCE") {
+        badge.textContent = "IDLE / PAUSE";
+        badge.style.background = "rgba(255, 255, 255, 0.08)";
+        badge.style.color = "var(--muted)";
+        csiBig.style.color = "var(--muted)";
+        csiMeter.style.background = "var(--muted)";
+        desc.textContent = "Awaiting caller phonation";
+        banner.classList.remove("active");
       } else {
-        csiEl.style.color = "var(--emerald)";
-        statusBadge.textContent = "HEALTHY";
-        statusBadge.style.background = "rgba(16, 185, 129, 0.15)";
-        statusBadge.style.color = "var(--emerald)";
-        alertBanner.classList.remove("active");
-        document.getElementById("csiLabel").textContent = "Stable Vocal Fold & Tract Dynamics";
+        badge.textContent = "HEALTHY";
+        badge.style.background = "rgba(52, 211, 153, 0.15)";
+        badge.style.color = "var(--green)";
+        csiBig.style.color = "var(--green)";
+        csiMeter.style.background = "var(--green)";
+        desc.textContent = "Normal vocal fold stability and tract symmetry";
+        banner.classList.remove("active");
       }
 
-      // Update button states if mode changed
-      if (data.mode && data.mode !== currentActiveMode) {
-        setActiveButton(data.mode);
-      }
-
-      // Terminal log feed sampling (every 10 packets)
-      if (packetCount % 10 === 0) {
-        addLog(`[${new Date().toLocaleTimeString()}] F0: ${data.f0.toFixed(1)}Hz | Jitter: ${jitterPct.toFixed(2)}% | HNR: ${data.hnr.toFixed(1)}dB | CSI: ${data.csi_score.toFixed(2)} [${data.status_label}]`, data.status_label === "ACUTE_STROKE_ALERT");
+      // Sync active button
+      if (d.mode && d.mode !== currentMode) {
+        syncButtons(d.mode);
       }
     }
 
-    function updateConnStatus(text, color) {
-      document.getElementById("connStatusText").textContent = text;
-      document.getElementById("connStatus").style.color = color;
-      document.getElementById("connStatus").style.borderColor = color;
-    }
-
-    function addLog(msg, isAlert = false) {
-      const feed = document.getElementById("terminalFeed");
-      const line = document.createElement("div");
-      line.className = "log-line" + (isAlert ? " log-alert" : "");
-      line.textContent = msg;
-      feed.appendChild(line);
-      while (feed.children.length > maxLogs) {
-        feed.removeChild(feed.firstChild);
-      }
-      feed.scrollTop = feed.scrollHeight;
-    }
-
-    function setMode(mode) {
-      currentActiveMode = mode;
-      setActiveButton(mode);
+    function setMode(m) {
+      currentMode = m;
+      syncButtons(m);
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ set_mode: mode }));
+        ws.send(JSON.stringify({ set_mode: m }));
       }
       fetch('/api/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: mode })
-      }).catch(err => console.error("Mode switch error:", err));
-      addLog(`[MODE] Switched audio pipeline to: ${mode.toUpperCase()}`);
+        body: JSON.stringify({ mode: m })
+      }).catch(err => console.error(err));
     }
 
-    function setActiveButton(mode) {
-      const btns = {
-        live: document.getElementById("btnLive"),
-        healthy: document.getElementById("btnHealthy"),
-        stroke: document.getElementById("btnStroke"),
-        hypoxia: document.getElementById("btnHypoxia"),
-        silence: document.getElementById("btnSilence")
-      };
-      Object.keys(btns).forEach(k => {
-        if (btns[k]) btns[k].classList.remove("active");
-      });
-      if (btns[mode]) btns[mode].classList.add("active");
+    function syncButtons(m) {
+      document.getElementById("btnLive").classList.toggle("active", m === "live");
+      document.getElementById("btnStroke").classList.toggle("active", m === "stroke");
     }
 
-    // Auto-connect on load
     window.addEventListener("DOMContentLoaded", () => {
-      connectWebSocket();
-      setActiveButton("live");
+      connect();
+      syncButtons("live");
     });
   </script>
 </body>
